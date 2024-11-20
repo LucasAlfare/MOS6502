@@ -154,38 +154,38 @@ data class MOS6502(val memory: Memory) {
    *
    * TODO: implement cross-page checking to increment 1 extra cycle when it happen 😪
    */
-  private val operandByAddressingMode = mutableMapOf<Int, () -> Int>()
+  private val addressingModes = Array(0xC) { { 0x00 } }
 
   init {
-    operandByAddressingMode[MODE_ACCUMULATOR] = { A }
+    addressingModes[MODE_ACCUMULATOR] = { A }
 
-    operandByAddressingMode[MODE_IMMEDIATE] = { memory[PC + 1] }
+    addressingModes[MODE_IMMEDIATE] = { memory[PC + 1] }
 
-    operandByAddressingMode[MODE_ZERO_PAGE] = {
+    addressingModes[MODE_ZERO_PAGE] = {
       val instructionArgument = memory[PC + 1]
       memory[instructionArgument]
     }
 
-    operandByAddressingMode[MODE_ZERO_PAGE_INDEXED_X] = {
+    addressingModes[MODE_ZERO_PAGE_INDEXED_X] = {
       val zeroPageAddress = memory[PC + 1]
       val effectiveAddress = (zeroPageAddress + X) and 0xFF
       memory[effectiveAddress]
     }
 
-    operandByAddressingMode[MODE_ZERO_PAGE_INDEXED_Y] = {
+    addressingModes[MODE_ZERO_PAGE_INDEXED_Y] = {
       val zeroPageAddress = memory[PC + 1]
       val effectiveAddress = (zeroPageAddress + Y) and 0xFF
       memory[effectiveAddress]
     }
 
-    operandByAddressingMode[MODE_ABSOLUTE] = {
+    addressingModes[MODE_ABSOLUTE] = {
       val lo = memory[PC + 1]
       val hi = memory[PC + 2]
       val address = (hi shl 8) or lo
       memory[address]
     }
 
-    operandByAddressingMode[MODE_INDEXED_ABSOLUTE_X] = {
+    addressingModes[MODE_INDEXED_ABSOLUTE_X] = {
       val lo = memory[PC + 1]
       val hi = memory[PC + 2]
       val baseAddress = (hi shl 8) or lo
@@ -193,7 +193,7 @@ data class MOS6502(val memory: Memory) {
       memory[effectiveAddress]
     }
 
-    operandByAddressingMode[MODE_INDEXED_ABSOLUTE_Y] = {
+    addressingModes[MODE_INDEXED_ABSOLUTE_Y] = {
       val lo = memory[PC + 1]
       val hi = memory[PC + 2]
       val baseAddress = (hi shl 8) or lo
@@ -201,7 +201,7 @@ data class MOS6502(val memory: Memory) {
       memory[effectiveAddress]
     }
 
-    operandByAddressingMode[MODE_RELATIVE] = {
+    addressingModes[MODE_RELATIVE] = {
       val offset = memory[PC + 1]
       val relativeAddress =
         if (offset < 0x80)
@@ -211,7 +211,7 @@ data class MOS6502(val memory: Memory) {
       memory[relativeAddress]
     }
 
-    operandByAddressingMode[MODE_INDIRECT_X] = {
+    addressingModes[MODE_INDIRECT_X] = {
       val baseAddress = (memory[PC + 1] + X) and 0xFF
       val lo = memory[baseAddress]
       val hi = memory[(baseAddress + 1) and 0xFF]
@@ -220,7 +220,7 @@ data class MOS6502(val memory: Memory) {
     }
 
     // TODO: check if is right
-    operandByAddressingMode[MODE_INDIRECT_Y] = {
+    addressingModes[MODE_INDIRECT_Y] = {
       val baseAddress = memory[PC + 1]
       val lo = memory[baseAddress]
       val hi = memory[(baseAddress + 1) and 0xFF]
@@ -230,7 +230,7 @@ data class MOS6502(val memory: Memory) {
     }
 
     // TODO: check if is right
-    operandByAddressingMode[MODE_ABSOLUTE_INDIRECT] = {
+    addressingModes[MODE_ABSOLUTE_INDIRECT] = {
       val lo = memory[PC + 1]
       val hi = memory[PC + 2]
       val pointerAddress = (hi shl 8) or lo
@@ -240,7 +240,7 @@ data class MOS6502(val memory: Memory) {
       memory[effectiveAddress]
     }
 
-    operandByAddressingMode[MODE_IMPLIED] = { 0x00 }
+    addressingModes[MODE_IMPLIED] = { 0x00 }
 
     this.reset()
   }
@@ -298,7 +298,7 @@ data class MOS6502(val memory: Memory) {
   }
 
   fun adc(addressingMode: Int, nBytes: Int, nCycles: Int): Int {
-    val operand = operandByAddressingMode[addressingMode]!!()
+    val operand = addressingModes[addressingMode]()
     val a = A
     val c = C
 
@@ -319,7 +319,7 @@ data class MOS6502(val memory: Memory) {
   }
 
   fun and(addressingMode: Int, nBytes: Int, nCycles: Int): Int {
-    val operand = operandByAddressingMode[addressingMode]!!()
+    val operand = addressingModes[addressingMode]()
 
     A = A and operand
 
@@ -331,7 +331,7 @@ data class MOS6502(val memory: Memory) {
   }
 
   fun lda(addressingMode: Int, nBytes: Int, nCycles: Int): Int {
-    val operand = operandByAddressingMode[addressingMode]!!()
+    val operand = addressingModes[addressingMode]()
 
     A = operand and 0xFF
 
