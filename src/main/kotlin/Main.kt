@@ -213,27 +213,27 @@ data class MOS6502(val memory: Memory) {
 
     operandByAddressingMode[MODE_INDIRECT_X] = {
       val baseAddress = (memory[PC + 1] + X) and 0xFF
-      val lowInt = memory[baseAddress]
-      val highInt = memory[(baseAddress + 1) and 0xFF]
-      val effectiveAddress = (highInt shl 8) or lowInt
+      val lo = memory[baseAddress]
+      val hi = memory[(baseAddress + 1) and 0xFF]
+      val effectiveAddress = (hi shl 8) or lo
       memory[effectiveAddress]
     }
 
     // TODO: check if is right
     operandByAddressingMode[MODE_INDIRECT_Y] = {
       val baseAddress = memory[PC + 1]
-      val lowInt = memory[baseAddress]
-      val highInt = memory[(baseAddress + 1) and 0xFF]
-      val baseEffectiveAddress = (highInt shl 8) or lowInt
+      val lo = memory[baseAddress]
+      val hi = memory[(baseAddress + 1) and 0xFF]
+      val baseEffectiveAddress = (hi shl 8) or lo
       val effectiveAddress = baseEffectiveAddress + Y
       memory[effectiveAddress]
     }
 
     // TODO: check if is right
     operandByAddressingMode[MODE_ABSOLUTE_INDIRECT] = {
-      val lowInt = memory[PC + 1]
-      val highInt = memory[PC + 2]
-      val pointerAddress = (highInt shl 8) or lowInt
+      val lo = memory[PC + 1]
+      val hi = memory[PC + 2]
+      val pointerAddress = (hi shl 8) or lo
       val lowTarget = memory[pointerAddress]
       val highTarget = memory[(pointerAddress + 1) and 0xFFFF]
       val effectiveAddress = (highTarget shl 8) or lowTarget
