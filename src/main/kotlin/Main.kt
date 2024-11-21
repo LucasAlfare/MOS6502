@@ -2,7 +2,7 @@
 
 import kotlin.system.measureNanoTime
 
-const val ONE_KILOBYTE = 1024
+private const val ONE_KILOBYTE = 1024
 
 /**
  * Maximum frequency rate of the clocks that MOS6502 can do.§
@@ -22,22 +22,22 @@ const val ONE_KILOBYTE = 1024
  *
  * Wwe try to measure our kotlin functions speed using nano-time.
  */
-const val CLOCKS_PER_SECOND = 3_000_000f // 3MHz -> cycles/clocks per second
+private const val CLOCKS_PER_SECOND = 3_000_000f // 3MHz -> cycles/clocks per second
 
 // Listing addressing modes based on order of original resource
-const val MODE_ACCUMULATOR = 0x0
-const val MODE_IMMEDIATE = 0x1
-const val MODE_ABSOLUTE = 0x2
-const val MODE_ZERO_PAGE = 0x3
-const val MODE_ZERO_PAGE_INDEXED_X = 0x4
-const val MODE_ZERO_PAGE_INDEXED_Y = 0x5
-const val MODE_INDEXED_ABSOLUTE_X = 0x6
-const val MODE_INDEXED_ABSOLUTE_Y = 0x7
-const val MODE_IMPLIED = 0x8
-const val MODE_RELATIVE = 0x9
-const val MODE_INDIRECT_X = 0xA
-const val MODE_INDIRECT_Y = 0xB
-const val MODE_ABSOLUTE_INDIRECT = 0xC
+private const val MODE_ACCUMULATOR = 0x0
+private const val MODE_IMMEDIATE = 0x1
+private const val MODE_ABSOLUTE = 0x2
+private const val MODE_ZERO_PAGE = 0x3
+private const val MODE_ZERO_PAGE_INDEXED_X = 0x4
+private const val MODE_ZERO_PAGE_INDEXED_Y = 0x5
+private const val MODE_INDEXED_ABSOLUTE_X = 0x6
+private const val MODE_INDEXED_ABSOLUTE_Y = 0x7
+private const val MODE_IMPLIED = 0x8
+private const val MODE_RELATIVE = 0x9
+private const val MODE_INDIRECT_X = 0xA
+private const val MODE_INDIRECT_Y = 0xB
+private const val MODE_ABSOLUTE_INDIRECT = 0xC
 
 /**
  * This is a memory structure created in order to the processor
@@ -50,7 +50,7 @@ const val MODE_ABSOLUTE_INDIRECT = 0xC
  * Probably we need to create a memory map interface to define how to slice
  * and organize this amount of memory
  */
-data class Memory(private val content: IntArray = IntArray(64 * ONE_KILOBYTE) { 0x00 }) {
+private data class Memory(private val content: IntArray = IntArray(64 * ONE_KILOBYTE) { 0x00 }) {
 
   fun size() = content.size
 
@@ -123,7 +123,7 @@ data class Memory(private val content: IntArray = IntArray(64 * ONE_KILOBYTE) { 
  * of the memory. Each mode describes its rules of how to obtain the operand
  * number.
  */
-data class MOS6502(val memory: Memory) {
+private data class MOS6502(val memory: Memory) {
 
   // general registers; all are treated as 8-bit length
   private var A: Int = 0
@@ -140,6 +140,8 @@ data class MOS6502(val memory: Memory) {
   private var B: Int = 0
   private var V: Int = 0
   private var N: Int = 0
+
+  private var pageCrossed = false
 
   /**
    * Maps custom local "opcodes" to custom local functions.
@@ -196,6 +198,10 @@ data class MOS6502(val memory: Memory) {
       val hi = memory[PC + 2]
       val baseAddress = (hi shl 8) or lo
       val effectiveAddress = baseAddress + X
+
+      // stores if we are facing cross-paging in a "global" variable
+      pageCrossed = (baseAddress and 0xFF00) != (effectiveAddress and 0xFF)
+
       memory[effectiveAddress]
     }
 
@@ -204,6 +210,10 @@ data class MOS6502(val memory: Memory) {
       val hi = memory[PC + 2]
       val baseAddress = (hi shl 8) or lo
       val effectiveAddress = baseAddress + Y
+
+      // stores if we are facing cross-paging in a "global" variable
+      pageCrossed = (baseAddress and 0xFF00) != (effectiveAddress and 0xFF)
+
       memory[effectiveAddress]
     }
 
@@ -214,6 +224,10 @@ data class MOS6502(val memory: Memory) {
           PC + 2 + (offset)
         else
           PC + 2 + offset - 0x100
+
+      // stores if we are facing cross-paging in a "global" variable
+      pageCrossed = (PC and 0xFF00) != (relativeAddress)
+
       memory[relativeAddress]
     }
 
@@ -232,6 +246,10 @@ data class MOS6502(val memory: Memory) {
       val hi = memory[(baseAddress + 1) and 0xFF]
       val baseEffectiveAddress = (hi shl 8) or lo
       val effectiveAddress = baseEffectiveAddress + Y
+
+      // stores if we are facing cross-paging in a "global" variable
+      pageCrossed = (baseEffectiveAddress and 0xFF00) != (effectiveAddress and 0xFF)
+
       memory[effectiveAddress]
     }
 
@@ -259,6 +277,8 @@ data class MOS6502(val memory: Memory) {
 
   // just executes current PC (program count) instruction that is inside the memory
   fun executeNext() {
+    // always reset my custom "page crossed" flag before executing a instruction
+    pageCrossed = false
     var currentNumCycles: Int
     val elapsedNs = measureNanoTime {
       currentNumCycles = when (val nextOpCode = memory[PC]) {
@@ -343,7 +363,18 @@ data class MOS6502(val memory: Memory) {
 
     // advances the counter based on size of this instruction
     PC += nBytes
-    return nCycles
+
+    // trying to see if we need extra cycle when cross-page happen
+    val extraCycle = if (pageCrossed) {
+      when (addressingMode) {
+        MODE_INDEXED_ABSOLUTE_X, MODE_INDEXED_ABSOLUTE_Y, MODE_INDIRECT_Y -> 1
+        else -> 0
+      }
+    } else {
+      0
+    }
+
+    return nCycles + extraCycle
   }
 
   /**
@@ -367,7 +398,18 @@ data class MOS6502(val memory: Memory) {
     Z = if (A == 0) 1 else 0
 
     PC += nBytes
-    return nCycles
+
+    // trying to see if we need extra cycle when cross-page happen
+    val extraCycle = if (pageCrossed) {
+      when (addressingMode) {
+        MODE_INDEXED_ABSOLUTE_X, MODE_INDEXED_ABSOLUTE_Y, MODE_INDIRECT_Y -> 1
+        else -> 0
+      }
+    } else {
+      0
+    }
+
+    return nCycles + extraCycle
   }
 
   /**
@@ -444,7 +486,18 @@ data class MOS6502(val memory: Memory) {
     val operand = addressingModes[addressingMode]()
     if (C == 0) PC = operand
     PC += nBytes
-    return nCycles
+
+    // trying to see if we need extra cycle when cross-page happen
+    // But here I don't know how to check the "1 to cycles if branch occurs on same page or 2 to cycles if branch occurs to different page"
+    val extraCycle = if (pageCrossed) {
+      when (addressingMode) {
+        MODE_RELATIVE -> 1; else -> 0
+      }
+    } else {
+      0
+    }
+
+    return nCycles + extraCycle
   }
 
   /**
@@ -463,7 +516,19 @@ data class MOS6502(val memory: Memory) {
     val operand = addressingModes[addressingMode]()
     if (C == 1) PC = operand
     PC += nBytes
-    return nCycles
+
+    // trying to see if we need extra cycle when cross-page happen
+    // But here I don't know how to check the "1 to cycles if branch occurs on same page or 2 to cycles if branch occurs to different page"
+    val extraCycle = if (pageCrossed) {
+      when (addressingMode) {
+        MODE_RELATIVE -> 1
+        else -> 0
+      }
+    } else {
+      0
+    }
+
+    return nCycles + extraCycle
   }
 
   private fun basicSleep(nanos: Long) {
