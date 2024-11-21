@@ -292,6 +292,13 @@ data class MOS6502(val memory: Memory) {
         0x21 -> and(MODE_INDIRECT_X, 2, 6)
         0x31 -> and(MODE_INDIRECT_Y, 2, 5)
 
+        // ASL instruction and its modes
+        0x0A -> asl(MODE_ACCUMULATOR, 1, 2)
+        0x06 -> asl(MODE_ZERO_PAGE, 2, 5)
+        0x16 -> asl(MODE_ZERO_PAGE_INDEXED_X, 2, 6)
+        0x0E -> asl(MODE_ABSOLUTE, 3, 6)
+        0x1E -> asl(MODE_INDEXED_ABSOLUTE_X, 3, 7)
+
         else -> throw IllegalStateException("Unsupported opcode detected in program count position [$PC]: [$nextOpCode]")
       }
     }
@@ -303,6 +310,15 @@ data class MOS6502(val memory: Memory) {
     if (elapsedNs < expectedNs) basicSleep(expectedNs - elapsedNs)
   }
 
+  /**
+   * "ADC" instruction; "Add with Carry".
+   *
+   * This instruction takes the effective operand and sums with the current
+   * [A] register and also with the current [C] register.
+   *
+   * After, the instruction updates the flags [N], [Z], [C] and [V] based on
+   * the obtained result.
+   */
   fun adc(addressingMode: Int, nBytes: Int, nCycles: Int): Int {
     val operand = addressingModes[addressingMode]()
     val a = A
@@ -324,6 +340,18 @@ data class MOS6502(val memory: Memory) {
     return nCycles
   }
 
+  /**
+   * "AND" instruction; "Logical AND between operand and [A] register"
+   *
+   * This instruction will perform the logical AND (&) operation
+   * between the retrieved operand with the current value of the [A]
+   * register.
+   *
+   * The result will be stored in the [A] register itself.
+   *
+   * In the end, the instruction updates the flags [N] and [Z]
+   * based on the result.
+   */
   fun and(addressingMode: Int, nBytes: Int, nCycles: Int): Int {
     val operand = addressingModes[addressingMode]()
 
@@ -336,6 +364,15 @@ data class MOS6502(val memory: Memory) {
     return nCycles
   }
 
+  /**
+   * "LDA" instruction; "Load [A] register with operand"
+   *
+   * This instruction just replaces the value of the [A] register
+   * with the retrieved operand.
+   *
+   * After the process, the instruction updates the flags [N] and
+   * [Z] based on operand.
+   */
   fun lda(addressingMode: Int, nBytes: Int, nCycles: Int): Int {
     val operand = addressingModes[addressingMode]()
 
@@ -343,6 +380,42 @@ data class MOS6502(val memory: Memory) {
 
     N = if (A and 0x80 != 0) 1 else 0
     Z = if (A == 0) 1 else 0
+
+    PC += nBytes
+    return nCycles
+  }
+
+  /**
+   * "ASL" instruction; "Shift left operand or [A] register
+   *
+   * This instruction simply performs a left shit in the retrieved
+   * operand. However, if we are facing the [MODE_ACCUMULATOR], then
+   * the final result is stored in the [A] register itself, otherwise
+   * the final result is stored in the same operand. This happens because
+   * if the mode is not [MODE_ACCUMULATOR] then we are basically searching
+   * the operand in somewhere of the memory, then this instruction will
+   * replace the value at that address (which the operand will effective
+   * be) with the shifted result.
+   *
+   * This instruction also updates the [C] flag with the 7th bit of the
+   * retrieved operand. Beyond this, this instruction updates the flags
+   * [N] and [Z] based on final result.
+   */
+  fun asl(addressingMode: Int, nBytes: Int, nCycles: Int): Int {
+    val operand = addressingModes[addressingMode]()
+    val nextCarry = (operand and 0x80) shr 7
+    val result = (operand shl 1) and 0xFF
+
+    if (addressingMode == MODE_ACCUMULATOR) {
+      A = result
+    } else {
+      memory[operand] = result
+    }
+
+    // updates flags
+    C = if (nextCarry != 0) 1 else 0
+    Z = if (result == 0) 1 else 0
+    N = if (result and 0x80 != 0) 1 else 0
 
     PC += nBytes
     return nCycles
