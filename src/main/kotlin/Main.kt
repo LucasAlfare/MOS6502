@@ -299,6 +299,9 @@ data class MOS6502(val memory: Memory) {
         0x0E -> asl(MODE_ABSOLUTE, 3, 6)
         0x1E -> asl(MODE_INDEXED_ABSOLUTE_X, 3, 7)
 
+        // BCC instruction and its modes
+        0x90 -> bcc(MODE_RELATIVE, 2, 2 )
+
         else -> throw IllegalStateException("Unsupported opcode detected in program count position [$PC]: [$nextOpCode]")
       }
     }
@@ -402,21 +405,41 @@ data class MOS6502(val memory: Memory) {
    * [N] and [Z] based on final result.
    */
   fun asl(addressingMode: Int, nBytes: Int, nCycles: Int): Int {
-    val operand = addressingModes[addressingMode]()
-    val nextCarry = (operand and 0x80) shr 7
-    val result = (operand shl 1) and 0xFF
+    val finalValue = if (addressingMode == MODE_ACCUMULATOR) {
+      C = (A shr 7) and 1
+      A = A shl 1
 
-    if (addressingMode == MODE_ACCUMULATOR) {
-      A = result
+      A
     } else {
-      memory[operand] = result
+      val operand = addressingModes[addressingMode]()
+      C = (operand shr 7) and 1
+      memory[operand] = operand shl 1
+
+      operand
     }
 
-    // updates flags
-    C = if (nextCarry != 0) 1 else 0
-    Z = if (result == 0) 1 else 0
-    N = if (result and 0x80 != 0) 1 else 0
+    Z = if (finalValue == 0) 1 else 0
+    N = if (finalValue and 0x80 != 0) 1 else 0
 
+    PC += nBytes
+    return nCycles
+  }
+
+  /**
+   * "BCC" instruction; "Branch flow if [C] is 0"
+   *
+   * This instruction basically works to change the current
+   * [PC] value. In other words, it works to change the current
+   * execution flow of the processor, once it will change the
+   * main register that tracks where the processor is reading
+   * bytes.
+   *
+   * But this instruction will only do that if the current value
+   * of the flag [C] is clear (zero; 0).
+   */
+  fun bcc(addressingMode: Int, nBytes: Int, nCycles: Int): Int {
+    val operand = addressingModes[addressingMode]()
+    if (C == 0) PC = operand
     PC += nBytes
     return nCycles
   }
