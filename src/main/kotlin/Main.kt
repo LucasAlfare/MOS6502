@@ -300,7 +300,10 @@ data class MOS6502(val memory: Memory) {
         0x1E -> asl(MODE_INDEXED_ABSOLUTE_X, 3, 7)
 
         // BCC instruction and its modes
-        0x90 -> bcc(MODE_RELATIVE, 2, 2 )
+        0x90 -> bcc(MODE_RELATIVE, 2, 2)
+
+        // BCS instruction and its modes
+        0xB0 -> bcs(MODE_RELATIVE, 2, 2)
 
         else -> throw IllegalStateException("Unsupported opcode detected in program count position [$PC]: [$nextOpCode]")
       }
@@ -440,6 +443,25 @@ data class MOS6502(val memory: Memory) {
   fun bcc(addressingMode: Int, nBytes: Int, nCycles: Int): Int {
     val operand = addressingModes[addressingMode]()
     if (C == 0) PC = operand
+    PC += nBytes
+    return nCycles
+  }
+
+  /**
+   * "BCS" instruction; "Branch flow if [C] is 1"
+   *
+   * This instruction basically works to change the current
+   * [PC] value. In other words, it works to change the current
+   * execution flow of the processor, once it will change the
+   * main register that tracks where the processor is reading
+   * bytes.
+   *
+   * But this instruction will only do that if the current value
+   * of the flag [C] is set (one; 1).
+   */
+  fun bcs(addressingMode: Int, nBytes: Int, nCycles: Int): Int {
+    val operand = addressingModes[addressingMode]()
+    if (C == 1) PC = operand
     PC += nBytes
     return nCycles
   }
