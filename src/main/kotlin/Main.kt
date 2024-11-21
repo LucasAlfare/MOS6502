@@ -2,6 +2,8 @@
 
 import kotlin.system.measureNanoTime
 
+const val ONE_KILOBYTE = 1024
+
 /**
  * Maximum frequency rate of the clocks that MOS6502 can do.§
  *
@@ -48,7 +50,7 @@ const val MODE_ABSOLUTE_INDIRECT = 0xC
  * Probably we need to create a memory map interface to define how to slice
  * and organize this amount of memory
  */
-data class Memory(private val content: IntArray = IntArray(64_000) { 0x00 }) {
+data class Memory(private val content: IntArray = IntArray(64 * ONE_KILOBYTE) { 0x00 }) {
 
   fun size() = content.size
 
@@ -152,9 +154,13 @@ data class MOS6502(val memory: Memory) {
    * This helps to separate and avoid repeating logic of retrieving
    * operands.
    *
+   * We fill this array with functions. Each element can be literally invoked
+   * like "`addressingModes[idx]()`", which should return the appropriate
+   * operand based on the accessed function.
+   *
    * TODO: implement cross-page checking to increment 1 extra cycle when it happen 😪
    */
-  private val addressingModes = Array(0xC) { { 0x00 } }
+  val addressingModes = Array(0xC + 1) { { 0x00 } }
 
   init {
     addressingModes[MODE_ACCUMULATOR] = { A }
